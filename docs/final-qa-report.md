@@ -2,8 +2,9 @@
 
 ## Commit tested
 
-The static checks below were run after the development-login hardening change. The
-final commit SHA is recorded by Git when this report is committed.
+The static checks below were run on the merged tree represented by the commit
+that contains this report and its parent merge. The exact final SHA is available
+from `git rev-parse HEAD` after checkout.
 
 ## Static
 
