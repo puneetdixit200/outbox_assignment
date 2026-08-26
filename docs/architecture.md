@@ -10,10 +10,11 @@ This repository implements a durable email scheduler with a Next.js client, Expr
 4. PostgreSQL commits one campaign and one `ENQUEUE_PENDING` row per recipient. The first recipient uses the requested start instant; later recipients use zero-based offsets.
 5. BullMQ `addBulk()` creates deterministic one-recipient delayed jobs. Pending rows are recoverable if queue insertion is interrupted.
 6. The worker atomically claims a row with a processing lease.
-7. Redis atomically reserves a sender spacing slot. If the slot is in the future, the BullMQ job is moved back to delayed state rather than sleeping in the worker.
-8. At the send instant, one Redis Lua script checks both the sender-global UTC-hour cap and the campaign UTC-hour cap and increments both only when both have capacity.
-9. The worker sends through configured Ethereal SMTP.
-10. Success records `SENT`, deterministic SMTP `Message-ID`, preview URL, timestamps, and a delivery ledger entry in PostgreSQL.
+7. Before touching sender spacing, Redis performs an atomic non-consuming check of both the sender-global and campaign UTC-hour counters. If either is already full, the job moves directly to the next hour window.
+8. Redis applies an atomic sender-spacing gate. When the sender is eligible, one worker advances the next-available timestamp; concurrent contenders receive the next eligible instant and return to BullMQ delayed state instead of pre-reserving a chain of future slots.
+9. Immediately before SMTP, one Redis Lua script performs the authoritative sender + campaign hourly check-and-increment. Both counters advance only when both have capacity.
+10. The worker sends through configured Ethereal SMTP.
+11. Success records `SENT`, deterministic SMTP `Message-ID`, preview URL, timestamps, and a delivery ledger entry in PostgreSQL.
 
 ## Recovery and persistence
 
@@ -32,9 +33,9 @@ For a stale processing row, reconciliation first checks the existing BullMQ job.
 
 Claiming a job sets `PROCESSING`, `processing_started_at`, and `processing_lease_expires_at`. Rate/spacing deferrals do not count as SMTP delivery attempts. `attempt_count` increments immediately before SMTP, so repeated throttling cannot consume the retry budget.
 
-A failed SMTP attempt clears the persisted spacing reservation. A later retry must reserve a new sender slot and therefore cannot bypass the minimum delay relative to other messages.
+A failed SMTP attempt clears the persisted spacing marker. A later retry must pass through the Redis spacing gate again and therefore cannot bypass the minimum delay relative to other messages.
 
-When an hourly limit is exhausted, the job is deferred to the next UTC hour and its old spacing reservation is cleared because that slot belonged to the exhausted hour.
+When an hourly limit is already exhausted, the worker defers before it advances sender spacing. A final atomic hourly reservation remains authoritative immediately before SMTP to handle races among parallel workers.
 
 ## Delivery semantics
 
@@ -55,7 +56,7 @@ Google OAuth uses a cryptographically random state value stored in a short-lived
 
 Sessions are signed HTTP-only cookies. Local development uses `SameSite=Lax`; production uses `SameSite=None; Secure` so a separately hosted frontend and API can still exchange the credential over HTTPS.
 
-Development login requires the explicit `ALLOW_DEV_LOGIN=true` flag and is unavailable in production. The submitted UI exposes Google OAuth rather than the development helper.
+A development helper requires the explicit `ALLOW_DEV_LOGIN=true` flag and is unavailable in production. The submitted UI exposes Google OAuth only rather than the development helper.
 
 Production configuration fails fast when the session secret, Google credentials, or SMTP credentials are missing.
 
@@ -63,16 +64,18 @@ Production configuration fails fast when the session secret, Google credentials,
 
 ### Sender spacing
 
-Redis stores the next available timestamp per sender. A Lua script atomically reserves the next slot and advances the pointer by the requested inter-send delay. The key TTL is extended far enough to cover future reservations.
+Redis stores the next eligible timestamp per sender. The Lua script does not allocate a long sequence of future slots. If the sender is eligible now, one caller atomically advances the timestamp by the minimum delay. If the sender is not yet eligible, callers receive the same next eligible timestamp and move their BullMQ jobs back to delayed state.
+
+This avoids phantom future spacing reservations for jobs that will be pushed out by hourly limits. The trade-off is additional BullMQ wake/defer churn during a very large same-sender burst.
 
 ### Hourly quota
 
-The hourly reservation script uses two keys for the same UTC hour:
+The hourly logic uses two keys for the same UTC hour:
 
 - sender-wide counter with the environment-configured hard maximum
 - campaign counter with the user's requested campaign limit
 
-Both are checked and incremented atomically. This avoids the ambiguity of comparing one shared counter against different campaign limits.
+A non-consuming atomic check is used before sender spacing so a fully exhausted hour does not spend spacing capacity. Immediately before SMTP, both counters are checked and incremented atomically. This second operation is authoritative and prevents parallel workers from overshooting either limit.
 
 When either counter has no capacity, the job moves to the next UTC-hour boundary instead of being dropped.
 
@@ -89,5 +92,6 @@ The database stores timestamps as `timestamptz`.
 - Redis rate counters are distributed and safe across multiple worker processes.
 - BullMQ delayed jobs are the scheduler. The 30-second reconciliation pass only repairs anomalous DB/queue state and is not cron-based scheduling.
 - Internal errors are logged server-side while clients receive generic 500 responses.
+- Under a 1000+ same-sender burst, workers may contend and re-delay repeatedly at spacing boundaries, but jobs remain persistent and provider-facing sends stay serialized.
 
 See the root README for setup, verification, restart demo steps, and assignment feature mapping.

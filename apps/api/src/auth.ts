@@ -60,7 +60,3 @@ export const oauthStateCookie = 'outbox_oauth_state';
 export function createOAuthState() {
   return randomBytes(32).toString('base64url');
 }
-
-export function isValidDevCredential(email: string, password: string, expectedEmail: string, expectedPassword: string) {
-  return email === expectedEmail && password === expectedPassword;
-}
