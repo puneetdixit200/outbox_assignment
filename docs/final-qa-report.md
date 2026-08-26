@@ -2,21 +2,20 @@
 
 ## Commit tested
 
-The static checks below were run on the merged tree represented by the commit
-that contains this report and its parent merge. The exact final SHA is available
-from `git rev-parse HEAD` after checkout.
+`1d255ff7af7c3e68873dfe214ba2109a19f58462`
 
 ## Static
 
 - `npm ci`: PASS. Installed 229 packages; npm reported 3 audit findings (1 moderate, 2 high).
-- `npm test`: PASS. 3 test files and 6 tests passed.
+- `npm test`: PASS. 3 test files and 7 tests passed.
 - `npm run build`: PASS. API TypeScript and Next.js production build passed.
 - `git diff --check`: PASS.
+- GitHub Actions CI: PASS. Run `32982574616` completed successfully on `main`.
 
 ## Figma visual audit
 
 - Official reference: <https://www.figma.com/design/kOTwGlESjijCYnMgtHfvfU/Outbox-Labs-Assignment?node-id=59-4050&p=f>
-- Exact frame inspection: BLOCKED. The supplied Figma URL returned a CloudFront `403 ERROR` in the available browser environment, and no Figma connector was available in this session.
+- Exact frame inspection: BLOCKED. The connected Figma integration reports that this account does not have edit access to the supplied file, so frame metadata and screenshots were unavailable.
 - Screenshots, frame inventory, pixel comparison, and visual PASS verdict were therefore not manufactured.
 - Visual verdict: **NOT VERIFIED**.
 
@@ -32,7 +31,7 @@ from `git rev-parse HEAD` after checkout.
 
 - `docker compose up -d` could not be run because the Docker daemon socket was unavailable.
 - Real Google OAuth and Ethereal SMTP require the submitter's configured credentials and were not claimed as verified here.
-- Repository privacy, reviewer access, GitHub Actions status, and demo-video status require GitHub/account access and are not asserted by this report.
+- Repository privacy, reviewer access, and demo-video status require GitHub/account access and are not asserted by this report.
 
 ## Final verdict
 
