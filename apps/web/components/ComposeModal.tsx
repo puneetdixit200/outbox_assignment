@@ -69,7 +69,7 @@ export function ComposeModal({ senders, onClose, onDone }: { senders: Sender[]; 
     <div className="backdrop">
       <form className="modal" onSubmit={submit}>
         <div className="modal-head">
-          <div><p className="eyebrow">NEW CAMPAIGN</p><h2>Schedule emails</h2></div>
+          <div><p className="eyebrow">COMPOSE</p><h2>Compose New Email</h2></div>
           <button type="button" className="quiet" onClick={onClose}>Close</button>
         </div>
         {error && <p className="error">{error}</p>}
@@ -82,17 +82,17 @@ export function ComposeModal({ senders, onClose, onDone }: { senders: Sender[]; 
         <label>Subject<input value={subject} onChange={event => setSubject(event.target.value)} required maxLength={200} /></label>
         <label>Body<textarea value={body} onChange={event => setBody(event.target.value)} required rows={5} /></label>
         <label>
-          Recipients <span className="hint">CSV, TXT, commas, spaces, or newlines</span>
+          Leads <span className="hint">Upload CSV/TXT or paste email addresses</span>
           <input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={onFile} />
           <textarea value={recipientText} onChange={event => setRecipientText(event.target.value)} required rows={4} placeholder="ada@example.com, grace@example.com" />
-          <span className="recipient-count">{recipients.length} valid recipient{recipients.length === 1 ? '' : 's'}</span>
+          <span className="recipient-count">{recipients.length} email address{recipients.length === 1 ? '' : 'es'} detected</span>
         </label>
         <div className="grid">
           <label>Start time<input type="datetime-local" min={minimumStart} value={startAt} onChange={event => setStartAt(event.target.value)} required /></label>
           <label>Delay between emails (ms)<input type="number" min={DEFAULT_MIN_DELAY_MS} value={delay} onChange={event => setDelay(Number(event.target.value))} /></label>
-          <label>Campaign hourly cap<input type="number" min="1" value={limit} onChange={event => setLimit(Number(event.target.value))} /></label>
+          <label>Hourly limit<input type="number" min="1" value={limit} onChange={event => setLimit(Number(event.target.value))} /></label>
         </div>
-        <button disabled={busy || !senderId}>{busy ? 'Scheduling…' : 'Schedule campaign'}</button>
+        <button disabled={busy || !senderId}>{busy ? 'Scheduling…' : 'Schedule'}</button>
       </form>
     </div>
   );
