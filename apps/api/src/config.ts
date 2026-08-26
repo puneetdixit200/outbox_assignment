@@ -25,7 +25,10 @@ const schema = z.object({
   JOB_ATTEMPTS: z.coerce.number().int().positive().max(10).default(3),
   JOB_BACKOFF_MS: z.coerce.number().int().positive().default(5000),
   ALLOW_DEV_MAIL: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
-  ALLOW_DEV_LOGIN: z.enum(['true', 'false']).default('false').transform(value => value === 'true')
+  ALLOW_DEV_LOGIN: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
+  DEV_LOGIN_EMAIL: z.string().email().default('demo@outbox.local'),
+  DEV_LOGIN_PASSWORD: z.string().min(12).default('outbox-local-demo'),
+  DEV_LOGIN_NAME: z.string().min(1).default('Demo User')
 });
 
 const parsed = schema.parse(process.env);

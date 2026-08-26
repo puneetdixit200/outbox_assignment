@@ -10,7 +10,7 @@ cookie_file="$(mktemp /tmp/outbox-smoke-cookie.XXXXXX)"
 trap 'rm -f "$cookie_file"' EXIT
 
 curl -fsS "$api_url/ready" | grep -q '"ok":true'
-if ! curl -fsS -c "$cookie_file" -H 'content-type: application/json' -d '{}' "$api_url/auth/dev-login" >/dev/null; then
+if ! curl -fsS -c "$cookie_file" -H 'content-type: application/json' -d '{"email":"'"${DEV_LOGIN_EMAIL:-demo@outbox.local}"'","password":"'"${DEV_LOGIN_PASSWORD:-outbox-local-demo}"'"}' "$api_url/auth/password-login" >/dev/null; then
   echo "dev login is disabled; restart API with ALLOW_DEV_LOGIN=true for this local smoke test" >&2
   exit 1
 fi

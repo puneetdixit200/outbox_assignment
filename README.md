@@ -211,7 +211,7 @@ GET  /emails/scheduled
 GET  /emails/sent
 ```
 
-A development-only `POST /auth/dev-login` exists for the local smoke test and is disabled unless `ALLOW_DEV_LOGIN=true`; it is unavailable in production.
+A development-only `POST /auth/password-login` accepts the configured `DEV_LOGIN_EMAIL` and `DEV_LOGIN_PASSWORD` only when `ALLOW_DEV_LOGIN=true`; it is unavailable in production. The local defaults are `demo@outbox.local` / `outbox-local-demo`. It is not a production password-authentication system.
 
 ## Verification
 
