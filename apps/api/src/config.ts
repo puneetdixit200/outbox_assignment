@@ -19,6 +19,7 @@ const schema = z.object({
   DEFAULT_MIN_SEND_DELAY_MS: z.coerce.number().int().positive().max(86_400_000).default(1000),
   MAX_EMAILS_PER_HOUR_PER_SENDER: z.coerce.number().int().positive().max(100_000).default(200),
   JOB_ATTEMPTS: z.coerce.number().int().positive().max(10).default(3), JOB_BACKOFF_MS: z.coerce.number().int().positive().default(5000),
+  ALLOW_DEV_LOGIN: z.enum(['true','false']).default('false').transform(value => value === 'true'),
   ALLOW_DEV_MAIL: z.enum(['true','false']).default('false').transform(value => value === 'true')
 });
 

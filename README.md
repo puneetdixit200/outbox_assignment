@@ -15,11 +15,12 @@ npm run dev:worker  # terminal 2
 npm run dev:web     # terminal 3
 ```
 
-Open http://localhost:3000. In development, the login screen offers a local
-demo login. Google OAuth is available when its three variables are configured.
-For local-only work, set `ALLOW_DEV_MAIL=true` explicitly to use the development
-mail adapter. Submitted/production configuration must provide Ethereal SMTP
-credentials; production refuses the development adapter.
+Open http://localhost:3000. Google OAuth is available when its three variables
+are configured. For local-only work, set `ALLOW_DEV_LOGIN=true` to enable the
+explicitly development-only login endpoint and set `ALLOW_DEV_MAIL=true` to use
+the development mail adapter. Neither is enabled by the submission-safe example
+configuration; submitted/production configuration must provide real Ethereal
+SMTP credentials.
 
 ## Configuration notes
 
