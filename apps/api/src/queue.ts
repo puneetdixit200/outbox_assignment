@@ -11,3 +11,8 @@ export async function enqueueEmail(id: string, scheduledAt: Date) {
   await emailQueue.add('send-email', { scheduledEmailId: id }, { jobId, delay: Math.max(0, scheduledAt.getTime() - Date.now()), attempts: config.JOB_ATTEMPTS, backoff: { type: 'exponential', delay: config.JOB_BACKOFF_MS }, removeOnComplete: 1000, removeOnFail: 5000 });
   return jobId;
 }
+export async function enqueueEmails(rows: Array<{ id: string; scheduledAt: Date }>) {
+  const jobs = await emailQueue.addBulk(rows.map(row => ({ name: 'send-email', data: { scheduledEmailId: row.id }, opts: { jobId: jobIdFor(row.id), delay: Math.max(0, row.scheduledAt.getTime() - Date.now()), attempts: config.JOB_ATTEMPTS, backoff: { type: 'exponential' as const, delay: config.JOB_BACKOFF_MS }, removeOnComplete: 1000, removeOnFail: 5000 } })));
+  return jobs.map(job => ({ id: job.data.scheduledEmailId as string, jobId: job.id as string }));
+}
+export async function closeQueue() { await emailQueue.close(); await redis.quit(); }

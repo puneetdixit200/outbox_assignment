@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { randomBytes } from 'node:crypto';
 import { Request, Response, NextFunction } from 'express';
 import { config } from './config.js';
 import { query } from './db/client.js';
@@ -20,5 +21,11 @@ export async function getOrCreateUser(input: { googleSubject?: string; email: st
     `INSERT INTO users (google_subject,email,name,avatar_url) VALUES ($1,$2,$3,$4)
      ON CONFLICT (email) DO UPDATE SET google_subject=COALESCE(EXCLUDED.google_subject,users.google_subject), name=EXCLUDED.name, avatar_url=EXCLUDED.avatar_url, updated_at=now()
      RETURNING id,email,name,avatar_url`, [input.googleSubject ?? null,input.email,input.name,input.avatarUrl ?? null]);
-  const row = result.rows[0]; return { id: row.id, email: row.email, name: row.name, avatarUrl: row.avatar_url ?? undefined };
+  const row = result.rows[0];
+  await query(`INSERT INTO sender_accounts (owner_user_id, display_name, from_email)
+    SELECT $1, $2, $3 WHERE NOT EXISTS (SELECT 1 FROM sender_accounts WHERE owner_user_id=$1 AND is_active)`, [row.id, `${row.name}'s sender`, row.email]);
+  return { id: row.id, email: row.email, name: row.name, avatarUrl: row.avatar_url ?? undefined };
 }
+
+export const oauthStateCookie = 'outbox_oauth_state';
+export function createOAuthState() { return randomBytes(32).toString('base64url'); }

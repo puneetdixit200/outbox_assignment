@@ -17,8 +17,9 @@ npm run dev:web     # terminal 3
 
 Open http://localhost:3000. In development, the login screen offers a local
 demo login. Google OAuth is available when its three variables are configured.
-Without SMTP credentials the worker uses a deterministic development mail
-adapter and records a preview URL; no real email is sent.
+For local-only work, set `ALLOW_DEV_MAIL=true` explicitly to use the development
+mail adapter. Submitted/production configuration must provide Ethereal SMTP
+credentials; production refuses the development adapter.
 
 ## Configuration notes
 
@@ -26,7 +27,7 @@ adapter and records a preview URL; no real email is sent.
   Google Cloud Console to enable the OAuth button.
 - Set `SMTP_HOST`, `SMTP_USER`, and `SMTP_PASSWORD` for Ethereal. The sender
   address remains server-side and is never placed in browser code.
-- `WORKER_CONCURRENCY`, `DEFAULT_MIN_SEND_DELAY_MS`, and
+- `WORKER_CONCURRENCY`, `PROCESSING_LEASE_MS`, `DEFAULT_MIN_SEND_DELAY_MS`, and
   `MAX_EMAILS_PER_HOUR_PER_SENDER` are server-controlled safety bounds.
 - CSV and text recipient files are parsed in the browser into normalized,
   deduplicated addresses; the API validates them again.
@@ -48,6 +49,10 @@ instances matching `DATABASE_URL` and `REDIS_URL`.
 - List endpoints are paginated and the dashboard exposes loading, empty, error,
   recipient-count, CSV upload, and delivery-state views.
 
+See [the implementation architecture](docs/architecture.md) for the actual
+delivery guarantees, recovery behavior, OAuth state validation, rate-limit
+semantics, and known SMTP limitation.
+
 ## Verification
 
 ```bash
@@ -55,5 +60,6 @@ npm test
 npm run build
 ```
 
-The API also exposes `/health` and `/ready`. See the engineering blueprint in
-the parent Downloads directory for the full design rationale and demo matrix.
+The API also exposes `/health` and `/ready`. See
+[docs/architecture.md](docs/architecture.md) for the implemented design,
+failure guarantees, and demo matrix.
