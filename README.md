@@ -279,3 +279,14 @@ Before submitting:
 - add the final demo-video link (maximum five minutes) to the submission form/README as required
 
 See [`docs/architecture.md`](docs/architecture.md) for the failure-model details.
+
+## Figma reference screenshots
+
+The supplied visual references are preserved in [`docs/screenshots/`](screenshots/):
+
+- [Login](screenshots/01-login.png)
+- [Scheduled inbox](screenshots/02-scheduled-inbox.png)
+- [Email detail](screenshots/03-email-detail.png)
+- [Compose with schedule picker](screenshots/04-compose-schedule-picker.png)
+- [Compose with upload](screenshots/05-compose-upload.png)
+- [Compose with detected recipients](screenshots/06-compose-recipients.png)
