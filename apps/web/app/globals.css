@@ -93,6 +93,9 @@ svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width:
 .settings-line > div { display: flex; align-items: center; gap: 18px; }
 .settings-line label { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 10px; }
 .settings-line input { width: 49px; height: 28px; padding: 0 7px; border: 1px solid var(--border); border-radius: 6px; }
+.settings-line > div { grid-column: 1 / -1; width: 100%; }
+.settings-line input { appearance: textfield; }
+.settings-line input::-webkit-inner-spin-button, .settings-line input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .settings-line .recipient-count { color: var(--primary); font-size: 10px; }
 .body-line { display: block; margin-top: 14px; border: 0; background: #fafafa; border-radius: 7px; }
 .body-line textarea { width: 100%; min-height: 330px; padding: 16px 12px; resize: vertical; }
