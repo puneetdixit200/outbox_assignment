@@ -12,7 +12,7 @@ A durable full-stack email scheduler built with **Next.js + TypeScript**, **Expr
 - deterministic BullMQ job IDs for enqueue idempotency
 - configurable worker concurrency
 - sender-global and campaign-specific hourly rate limits enforced atomically in Redis
-- configurable minimum delay between sends using sender-level Redis slot reservation
+- configurable minimum delay between sends using a sender-level Redis spacing gate
 - processing leases and recovery for stale worker claims
 - bounded retries with exponential BullMQ backoff
 - Ethereal SMTP via Nodemailer
@@ -24,7 +24,7 @@ A durable full-stack email scheduler built with **Next.js + TypeScript**, **Expr
 
 - Next.js App Router + TypeScript
 - Tailwind CSS toolchain plus project styling
-- Google login
+- real Google OAuth login in the submitted UI
 - user name, email, avatar, and logout
 - Scheduled and Sent/Failed tabs
 - Compose flow with subject, body, sender, start time, delay, hourly limit, and CSV/TXT upload
@@ -95,7 +95,7 @@ Important values:
 - `JOB_ATTEMPTS`
 - `JOB_BACKOFF_MS`
 
-`ALLOW_DEV_LOGIN` and `ALLOW_DEV_MAIL` are **local testing switches only** and default to `false`. They are not accepted as substitutes for the required Google OAuth and Ethereal setup.
+`ALLOW_DEV_LOGIN` and `ALLOW_DEV_MAIL` are **local testing switches only** and default to `false`. They are not substitutes for the required Google OAuth and Ethereal setup. The submitted frontend exposes Google OAuth only.
 
 When `NODE_ENV=production`, startup requires an explicit session secret, Google OAuth credentials, and SMTP credentials.
 
@@ -125,10 +125,12 @@ The worker sends through Nodemailer and stores the returned provider message ID 
 4. PostgreSQL commits the campaign and one `ENQUEUE_PENDING` row per recipient.
 5. The first recipient is scheduled exactly at the requested start time; later recipients use `(sequence - 1) × delay`.
 6. BullMQ `addBulk()` creates one delayed job per email with a deterministic job ID.
-7. The worker claims each DB row with a processing lease before execution.
-8. Sender spacing and hourly capacity are enforced in Redis.
-9. The email is sent using Ethereal SMTP.
-10. PostgreSQL records `SENT`/`FAILED`, send time, message ID, preview URL, errors, and attempt count.
+7. The worker claims each DB row with a processing lease.
+8. A Redis-backed quota check defers jobs to the next hour before they touch sender spacing when the current hour is already full.
+9. Sender spacing is enforced by an atomic Redis gate. One eligible job advances the sender's next-available time; concurrent contenders are moved back to BullMQ delayed state rather than pre-reserving a long chain of future slots.
+10. Immediately before SMTP, one atomic Redis reservation checks and increments both sender and campaign hourly counters.
+11. The email is sent using Ethereal SMTP.
+12. PostgreSQL records `SENT`/`FAILED`, send time, message ID, preview URL, errors, and attempt count.
 
 An `Idempotency-Key` header protects campaign creation against HTTP retries. The frontend keeps the same key for the life of a compose attempt rather than generating a different key for each retry.
 
@@ -158,20 +160,20 @@ Deterministic BullMQ job IDs make recovery enqueue operations idempotent.
 
 `WORKER_CONCURRENCY` configures BullMQ worker concurrency.
 
-Parallel workers do not rely on an in-process counter. Sender spacing is reserved with an atomic Redis Lua operation. Each reservation advances a sender-specific "next available" timestamp, so simultaneous jobs receive different slots.
+Parallel workers do not rely on an in-process counter. The sender-spacing Lua script is atomic: when a sender is eligible, one worker advances the sender's next-available timestamp; other workers receive that next eligible timestamp and move their BullMQ jobs back to delayed state. This preserves the minimum delay across workers without allocating future spacing slots to jobs that may later be blocked by hourly quota.
 
-If the current job is too early for its slot, it is moved back into BullMQ delayed state rather than sleeping inside a worker process.
+The trade-off is some extra BullMQ wake/defer churn when many jobs contend for the same sender, but provider-facing sends remain correctly serialized and no JavaScript timers are created per email.
 
 ## Hourly rate limiting
 
-Two counters are checked and incremented atomically in one Redis Lua script:
+Two counters are checked and incremented atomically in Redis:
 
 1. sender-global UTC-hour counter, capped by `MAX_EMAILS_PER_HOUR_PER_SENDER`
 2. campaign UTC-hour counter, capped by the campaign's requested hourly limit
 
-A send proceeds only if both counters have capacity. When either limit is exhausted, the job is moved to the next UTC-hour window. It is not discarded or permanently failed.
+Before sender spacing is touched, the worker performs an atomic non-consuming availability check. If either counter is already exhausted, the job is delayed directly to the next UTC-hour window. Immediately before SMTP, the worker performs the authoritative atomic check-and-increment of both counters, so parallel workers cannot overshoot either limit.
 
-This design means multiple campaigns can coexist for one sender while the sender-wide hard cap still cannot be exceeded.
+When either limit is reached, jobs are delayed rather than discarded or permanently failed. This allows multiple campaigns to coexist for one sender while the sender-wide hard cap still cannot be exceeded.
 
 ## Idempotency and delivery semantics
 
@@ -192,7 +194,8 @@ If 1000+ emails become eligible around the same time:
 
 - BullMQ persists the jobs rather than creating one JavaScript timer per email
 - worker concurrency bounds parallel processing
-- Redis spacing serializes provider-facing sends per sender
+- Redis hourly checks immediately move jobs out of an exhausted hour without spending sender-spacing capacity
+- the Redis spacing gate serializes provider-facing sends per sender; competing jobs are re-delayed as needed
 - Redis hourly counters defer excess jobs to later hour windows
 - PostgreSQL preserves observable state throughout the process
 
@@ -211,7 +214,7 @@ GET  /emails/scheduled
 GET  /emails/sent
 ```
 
-A development-only `POST /auth/password-login` accepts the configured `DEV_LOGIN_EMAIL` and `DEV_LOGIN_PASSWORD` only when `ALLOW_DEV_LOGIN=true`; it is unavailable in production. The local defaults are `demo@outbox.local` / `outbox-local-demo`. It is not a production password-authentication system.
+A development-only `POST /auth/dev-login` exists for the local smoke test and is disabled unless `ALLOW_DEV_LOGIN=true`; it is unavailable in production and is not exposed by the submitted frontend.
 
 ## Verification
 
@@ -243,11 +246,11 @@ Use real Ethereal credentials for SMTP verification. `ALLOW_DEV_MAIL=true` is av
 | no cron | BullMQ jobs; periodic reconciliation only repairs inconsistent state |
 | restart survival | Redis/Postgres persistence + reconciliation |
 | concurrency | configurable BullMQ worker concurrency |
-| delay between sends | Redis sender slot reservation |
+| delay between sends | atomic Redis sender-spacing gate |
 | hourly limit | atomic Redis sender + campaign hour counters |
 | multiple senders | sender-account model + compose sender selection |
 | SMTP | Nodemailer + Ethereal |
-| Google login | real Google OAuth |
+| Google login | real Google OAuth in submitted UI |
 | compose | Next.js compose modal |
 | CSV/text leads | browser parsing + backend validation |
 | scheduled/sent views | authenticated paginated API + dashboard tabs |
@@ -258,6 +261,7 @@ Use real Ethereal credentials for SMTP verification. `ALLOW_DEV_MAIL=true` is av
 - SMTP and PostgreSQL cannot be committed atomically; the remaining crash window is documented above.
 - Redis hourly windows are fixed UTC-hour buckets rather than sliding 60-minute windows.
 - Sender identities share one configured Ethereal SMTP account; they represent separate `From` identities for throttling and scheduling.
+- The spacing gate favors correctness over preallocating hundreds of future sender slots, so a very large same-sender burst may cause additional BullMQ delayed-job churn.
 - Reconciliation is recovery logic, not the scheduling mechanism. Normal scheduling is performed entirely with BullMQ delayed jobs.
 
 ## Submission checklist

@@ -2,7 +2,7 @@ import { Worker, Job, DelayedError } from 'bullmq';
 import { config } from './config.js';
 import { query, withTransaction, pool } from './db/client.js';
 import { redis, emailQueue, enqueueEmail } from './queue.js';
-import { reserveHourlyCapacity, reserveSpacing, nextHour } from './rateLimiter.js';
+import { hasHourlyCapacity, reserveHourlyCapacity, reserveSpacing, nextHour } from './rateLimiter.js';
 import { sendMail } from './mail.js';
 
 type EmailRow = {
@@ -105,17 +105,36 @@ async function processJob(job: Job<{ scheduledEmailId: string }>) {
   if (!(await claim(id))) return;
   if (await restoreRecordedDelivery(id)) return;
 
-  const spacingAt = email.spacing_reserved_at?.getTime()
-    ?? await reserveSpacing(email.sender_account_id, email.delay_between_emails_ms, Date.now());
+  const senderLimit = config.MAX_EMAILS_PER_HOUR_PER_SENDER;
+  const campaignLimit = Math.min(email.hourly_limit, senderLimit);
 
-  if (!email.spacing_reserved_at) {
-    await query(
-      `UPDATE scheduled_emails
-       SET spacing_reserved_at=to_timestamp($2 / 1000.0), scheduled_at=to_timestamp($2 / 1000.0), updated_at=now()
-       WHERE id=$1 AND status='PROCESSING'`,
-      [id, spacingAt]
-    );
+  const capacityAvailable = await hasHourlyCapacity(
+    email.sender_account_id,
+    email.campaign_id,
+    senderLimit,
+    campaignLimit,
+    new Date()
+  );
+
+  if (!capacityAvailable) {
+    const when = nextHour();
+    await defer(id, when, true);
+    await job.moveToDelayed(when.getTime(), job.token);
+    throw new DelayedError();
   }
+
+  const spacingAt = await reserveSpacing(
+    email.sender_account_id,
+    email.delay_between_emails_ms,
+    Date.now()
+  );
+
+  await query(
+    `UPDATE scheduled_emails
+     SET spacing_reserved_at=to_timestamp($2 / 1000.0), scheduled_at=to_timestamp($2 / 1000.0), updated_at=now()
+     WHERE id=$1 AND status='PROCESSING'`,
+    [id, spacingAt]
+  );
 
   if (spacingAt > Date.now()) {
     await defer(id, new Date(spacingAt));
@@ -123,15 +142,15 @@ async function processJob(job: Job<{ scheduledEmailId: string }>) {
     throw new DelayedError();
   }
 
-  const hasHourlyCapacity = await reserveHourlyCapacity(
+  const reservedHourlyCapacity = await reserveHourlyCapacity(
     email.sender_account_id,
     email.campaign_id,
-    config.MAX_EMAILS_PER_HOUR_PER_SENDER,
-    Math.min(email.hourly_limit, config.MAX_EMAILS_PER_HOUR_PER_SENDER),
+    senderLimit,
+    campaignLimit,
     new Date()
   );
 
-  if (!hasHourlyCapacity) {
+  if (!reservedHourlyCapacity) {
     const when = nextHour();
     await defer(id, when, true);
     await job.moveToDelayed(when.getTime(), job.token);

@@ -11,7 +11,6 @@ import {
   clearSession,
   createOAuthState,
   getOrCreateUser,
-  isValidDevCredential,
   oauthStateCookie,
   setSession
 } from './auth.js';
@@ -59,21 +58,6 @@ app.post('/auth/dev-login', async (req, res, next) => {
       name: z.string().default('Demo User')
     }).parse(req.body ?? {});
     const user = await getOrCreateUser({ email: input.email, name: input.name });
-    setSession(res, user);
-    res.json({ data: user });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post('/auth/password-login', async (req, res, next) => {
-  try {
-    if (config.NODE_ENV === 'production' || !config.ALLOW_DEV_LOGIN) return res.status(404).end();
-    const input = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body ?? {});
-    if (!isValidDevCredential(input.email, input.password, config.DEV_LOGIN_EMAIL, config.DEV_LOGIN_PASSWORD)) {
-      return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Invalid email or password' } });
-    }
-    const user = await getOrCreateUser({ email: config.DEV_LOGIN_EMAIL, name: config.DEV_LOGIN_NAME });
     setSession(res, user);
     res.json({ data: user });
   } catch (error) {
